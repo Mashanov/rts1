@@ -164,7 +164,6 @@ body.placing .bld:not(.empty){opacity:.35}
 .hcard .hb{font-size:11px;color:var(--essence);margin-top:4px}
 .hcard .hbtn{padding:6px 10px;font-size:11px}
 
-/* Passive skill / dragon ability cards */
 .skillcard{display:flex;flex-wrap:wrap;gap:10px;padding:10px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:9px;align-items:flex-start}
 .skill-ico{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;flex:0 0 auto;box-shadow:0 3px 8px rgba(0,0,0,.5);text-shadow:0 1px 2px rgba(0,0,0,.6)}
 .skill-info{flex:1;min-width:0}
@@ -276,7 +275,6 @@ input.fld:focus,select.fld:focus{border-color:var(--accent);box-shadow:0 0 0 2px
 #pausebtn.show{display:flex}
 #pausebtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
 
-/* Dragon ability bar in battle */
 #dragonbar{position:absolute;left:0;right:0;bottom:8px;z-index:26;display:none;justify-content:center;gap:8px;padding:0 12px;pointer-events:none}
 #dragonbar.show{display:flex}
 .dragbtn{width:52px;height:52px;border-radius:12px;border:2px solid var(--border);background:rgba(20,14,34,.92);color:var(--gold-l);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:auto;overflow:hidden;padding:0;box-shadow:0 4px 12px rgba(0,0,0,.7)}
@@ -532,7 +530,7 @@ const STR = {
     music:'Музыка', music_sub:'Фоновая музыка', language:'Язык', promocode:'Промокод', apply:'Применить',
     next:'Далее', claim:'Получить', finish:'Завершить',
     daily_desc:'Заходите каждый день — получайте золото.', rest_desc:'Пока отдыхаете — каждая минута приносит золото.',
-    ad_loading:'Загрузка рекламы…\nПожалуйста, подождите.', double_reward:'Удвоить за рекламу', take_reward:'Забрать',
+    ad_loading:'Загрузка рекламы…\nПожалуйста, подождите.', loading_game:'Загрузка игры…', double_reward:'Удвоить за рекламу', take_reward:'Забрать',
     paused:'Пауза', resume:'Продолжить', quit_level:'Покинуть уровень',
     win:'ПОБЕДА', lose:'ПОРАЖЕНИЕ',
     units:'Войска', units_desc:'Покупайте и улучшайте воинов.', lab:'Лаборатория', lab_desc:'Прокачивайте героев.',
@@ -581,7 +579,7 @@ const STR = {
     music:'Music', music_sub:'Background music', language:'Language', promocode:'Promo code', apply:'Apply',
     next:'Next', claim:'Claim', finish:'Finish',
     daily_desc:'Log in daily for gold.', rest_desc:'Each minute while resting adds gold.',
-    ad_loading:'Loading ad…\nPlease wait.', double_reward:'Double for ad', take_reward:'Take',
+    ad_loading:'Loading ad…\nPlease wait.', loading_game:'Loading game…', double_reward:'Double for ad', take_reward:'Take',
     paused:'Paused', resume:'Resume', quit_level:'Leave level',
     win:'VICTORY', lose:'DEFEAT',
     units:'Army', units_desc:'Buy and upgrade warriors.', lab:'Laboratory', lab_desc:'Upgrade heroes.',
@@ -910,6 +908,8 @@ function defaultState(){
     tutorial: 0, tutStep: 0,
     passiveSkills: {},
     dragon: { level: 0, upgradeEnd: 0 },
+    loginCount: 0,
+    levelEntries: 0,
     lastSaveTime: Date.now()
   };
 }
@@ -1016,7 +1016,7 @@ const Music = {
   }
 };
 function refreshMusic(){
-  if(state.music && !isPausedBy('hidden') && !isPausedBy('ad') && !isPausedBy('sailing')) Music.play();
+  if(state.music && !isPausedBy('hidden') && !isPausedBy('ad') && !isPausedBy('sailing') && !isPausedBy('bootload')) Music.play();
   else Music.stop();
 }
 
@@ -2013,7 +2013,6 @@ function renderDragonModal(){
   const maxed = dl >= DRAGON.maxLevel;
   let html = '';
 
-  // Dragon header
   html += `<div class="binfo" style="background:linear-gradient(135deg, rgba(123,92,255,.16), rgba(200,138,255,.08))">
     <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle, #c88aff, #6b3aa8);display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 0 24px rgba(200,138,255,.6)">🐉</div>
     <div class="bl">
@@ -2022,7 +2021,6 @@ function renderDragonModal(){
     </div>
   </div>`;
 
-  // Dragon upgrade button
   if(!maxed){
     const cost = DRAGON.cost(dl + 1);
     const ok = canAfford(cost);
@@ -2036,7 +2034,6 @@ function renderDragonModal(){
     html += `<div class="center muted" style="margin:8px 0">${t('level_max')}</div>`;
   }
 
-  // Abilities list
   html += `<div style="margin-top:16px;font-size:13px;color:var(--gold-l);font-weight:bold;margin-bottom:8px">${t('dragon_abilities')}</div>`;
   for(const ab of DRAGON_ABILITIES){
     const unlocked = dl >= ab.unlockLevel;
@@ -2486,8 +2483,14 @@ function buildSailingOverlay(){
   document.getElementById('sail-ship').innerHTML = SVG_SRC.ship;
 }
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
 async function sailToBattle(){
   if(anyPause()) return;
+
+  // Каждый заход на уровень увеличивает счётчик
+  state.levelEntries = (state.levelEntries || 0) + 1;
+  saveGame(true);
+
   const s = document.getElementById('sailing');
   s.classList.add('show'); setPause('sailing', true); Music.stop();
   document.getElementById('sail-txt').textContent = t('sail_txt');
@@ -2496,11 +2499,21 @@ async function sailToBattle(){
   ship.style.animation = 'none'; void ship.offsetWidth; ship.style.animation = '';
   await sleep(3200);
   s.classList.remove('show'); setPause('sailing', false);
-  setPause('ad', true); await showNativeAd('interstitial'); setPause('ad', false);
+
+  // Реклама только если пользователь уже был на уровнях более 3 раз
+  if(state.levelEntries > 3){
+    await showNativeAd('interstitial');
+  }
+
   startBattle(state.maxLevel);
 }
 async function startCaveBattle(lvl){
   if(anyPause()) return;
+
+  // Шахта — тоже уровень
+  state.levelEntries = (state.levelEntries || 0) + 1;
+  saveGame(true);
+
   const s = document.getElementById('sailing');
   s.classList.add('show'); setPause('sailing', true); Music.stop();
   document.getElementById('sail-txt').textContent = LANG==='ru'?'Спускаемся в шахту…':'Descending into the mine…';
@@ -2509,7 +2522,12 @@ async function startCaveBattle(lvl){
   ship.style.animation = 'none'; void ship.offsetWidth; ship.style.animation = '';
   await sleep(3200);
   s.classList.remove('show'); setPause('sailing', false);
-  setPause('ad', true); await showNativeAd('interstitial'); setPause('ad', false);
+
+  // Реклама только если пользователь уже был на уровнях более 3 раз
+  if(state.levelEntries > 3){
+    await showNativeAd('interstitial');
+  }
+
   startCave(lvl);
 }
 function startTutorialBattle(){
@@ -2645,7 +2663,6 @@ function updateGame(dt){
     if(G.isTutorial) pool = ['sword'];
     spawnUnit(pool[Math.floor(Math.random()*pool.length)], 'enemy', LANES[Math.floor(Math.random()*LANES.length)]);
   }
-  // Dragon cooldowns
   for(const id in G.dragonCds){
     if(G.dragonCds[id] > 0) G.dragonCds[id] -= dt;
   }
@@ -3070,13 +3087,11 @@ function startBattle(level, isTutorial){
   G.mode = 'battle'; G.level = level; G.isTutorial = !!isTutorial;
   G.units = []; G.projectiles = []; G.particles = []; G.damageNums = [];
   G.dragonCds = {};
-  // Passive: starting essence
   const baseStart = isTutorial ? 120 : 60;
   G.essence = baseStart + getPassiveBonus('start_essence');
   G.essenceMax = 120;
   G.essenceRegen = isTutorial ? 20 : (10 + level*0.35);
   G.essenceRegen *= (1 + getPassiveBonus('essence_regen'));
-  // Passive: base HP
   const baseHpMul = 1 + getPassiveBonus('base_hp');
   G.playerBase = {hp: cfg.playerBaseHp * baseHpMul, max: cfg.playerBaseHp * baseHpMul};
   G.enemyBase = {hp: cfg.enemyBaseHp, max: cfg.enemyBaseHp};
@@ -3587,9 +3602,7 @@ document.getElementById('pcode-apply').addEventListener('click', ()=>{
       b.buildStart = 0;
       if(cfg.resource){ state.prod[id] = Date.now(); }
     }
-    // Max passives
     PASSIVE_ORDER.forEach(id => { state.passiveSkills[id] = PASSIVE_SKILLS[id].maxLevel; });
-    // Max dragon
     state.dragon.level = DRAGON.maxLevel;
     state.caveMaxLevel = 999;
     state.maxLevel = 50;
@@ -3862,7 +3875,6 @@ setInterval(()=>{
       const nm = LANG==='ru' ? BUILDINGS[b.key].ru : BUILDINGS[b.key].en;
       toast(nm + ' — ' + t('ready'));
       questProgress('builds', 1);
-      // Пробуждение дракона при завершении башни мага
       if(b.key === 'magetower' && state.dragon.level === 0){
         state.dragon.level = 1;
         toast(LANG==='ru'?'🐉 Дракон пробуждён!':'🐉 Dragon awakened!');
@@ -3930,12 +3942,18 @@ if(HAS_VK){
   }catch(err){}
 }
 
-/* NOTE: initBanner() больше НЕ вызывается — это исправляет проблему «чёрного баннера» */
-
 /* ========================================================================
    BOOT
    ======================================================================== */
 async function boot(){
+  const adovEl = document.getElementById('adov');
+  const adovText = document.getElementById('adov-text');
+
+  // Показываем экран загрузки сразу же
+  adovText.textContent = '…';
+  adovEl.classList.add('show');
+  setPause('bootload', true);
+
   resizeCanvas();
   await loadSprites();
   buildSailingOverlay();
@@ -3973,7 +3991,8 @@ async function boot(){
     if(!('brewing' in state)) state.brewing = null;
     if(!state.passiveSkills) state.passiveSkills = {};
     if(!state.dragon) state.dragon = {level: 0, upgradeEnd: 0};
-    // Если башня мага уже построена, но дракон level 0 — дадим 1
+    if(typeof state.loginCount !== 'number') state.loginCount = 0;
+    if(typeof state.levelEntries !== 'number') state.levelEntries = 0;
     const mt = findBuildingSlot('magetower');
     if(mt !== null && state.slots[mt].level >= 1 && state.dragon.level === 0 && state.slots[mt].buildEnd <= Date.now()){
       state.dragon.level = 1;
@@ -3986,11 +4005,16 @@ async function boot(){
   LANG = state.lang === 'en' ? 'en' : 'ru';
   state.lang = LANG;
 
+  // Счётчик заходов в игру
+  state.loginCount = (state.loginCount || 0) + 1;
+
   cam.zoom = Math.max(computeMinZoom(), 0.5);
   centerCamOnCastle();
 
   ensureDailyQuests();
-  applyLang();
+  applyLang(); // (перезапишет adov-text на 'ad_loading', ниже перезапишем)
+  adovText.textContent = t('loading_game');
+
   refreshAllUI();
   renderLobbyBuildings();
   buildLobbyBottom();
@@ -3999,6 +4023,20 @@ async function boot(){
   const firstGesture = ()=>{ Music.ensure(); if(state.music) Music.play(); };
   window.addEventListener('pointerdown', firstGesture, {once: true});
   window.addEventListener('keydown', firstGesture, {once: true});
+
+  // Даём пользователю увидеть "Загрузка игры…"
+  await new Promise(r => setTimeout(r, 450));
+
+  // Сохраняем счётчик входов сразу
+  saveGame(true);
+
+  // Реклама при заходе — если пользователь заходил более 10 раз
+  if(state.loginCount > 10){
+    adovText.textContent = t('ad_loading');
+    await showNativeAd('interstitial');
+  }
+  adovEl.classList.remove('show');
+  setPause('bootload', false);
 
   if(state.tutorial !== 2){
     setTimeout(()=>{ startTutorial(); }, 600);
