@@ -519,7 +519,7 @@ const VK = {
     try{ return vkBridge.send(method, params); } catch(e){ return Promise.reject(e); }
   }
 };
-if(HAS_VK) VK.send('VKWebAppInit').catch(()=>{});
+if(HAS_VK) {VK.send('VKWebAppInit').catch(()=>{});showBanner();};
 
 /* ========================================================================
    I18N
@@ -3823,6 +3823,28 @@ function showNativeAd(format){
     VK.send('VKWebAppShowNativeAds', {ad_format: format}).then(d=>done(d || {result:true})).catch(()=>done({result:false}));
     setTimeout(()=>{ if(adov.classList.contains('show')) done({result:false}); }, 25000);
   });
+}
+
+async function showBanner() {
+  if (!HAS_VK) {
+    console.log('VK Bridge не доступен');
+    return;
+  }
+  try {
+    // 1. Проверяем, есть ли баннер для показа (опционально, но полезно)
+    const checkResult = await VK.send('VKWebAppCheckBannerAd');
+    console.log('Доступность баннера:', checkResult);
+
+    // 2. Показываем баннер
+    const result = await VK.send('VKWebAppShowBannerAd', {
+      // layout_type: 'resize', // или 'overlay'
+      // position: 'bottom',     // 'top' или 'bottom'
+      // height_type: 'auto'     // 'auto', 'fixed' или 'adaptive'
+    });
+    console.log('Баннер показан:', result);
+  } catch (error) {
+    console.error('Ошибка при показе баннера:', error);
+  }
 }
 
 /* ========================================================================
